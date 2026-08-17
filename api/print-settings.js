@@ -24,7 +24,7 @@ async function getAccessToken() {
 
   const { SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET } = getEnv();
 
-  const response = await fetch(`https://${SHOPIFY_SHOP}/admin/oauth/access_token`, {
+  const response = await fetch(`https://${SHOPIFY_SHOP}.myshopify.com/admin/oauth/access_token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -39,7 +39,10 @@ async function getAccessToken() {
   try {
     data = JSON.parse(text);
   } catch {
-    throw new Error(`Shopify token endpoint returned a non-JSON response (status ${response.status})`);
+    throw new Error(
+        `Shopify token endpoint returned a non-JSON response ` +
+        `(status ${response.status}): ${text.slice(0, 500)}`
+    );
   }
 
   if (!response.ok || !data.access_token) {
@@ -74,7 +77,7 @@ async function fetchProduct(productId) {
   const { SHOPIFY_SHOP } = getEnv();
   const accessToken = await getAccessToken();
 
-  const response = await fetch(`https://${SHOPIFY_SHOP}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
+  const response = await fetch(`https://${SHOPIFY_SHOP}.myshopify.com/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
