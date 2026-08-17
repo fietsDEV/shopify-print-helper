@@ -15,6 +15,7 @@ function getEnv() {
   return { SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET };
 }
 
+
 async function getAccessToken() {
   const now = Date.now();
   if (tokenCache.accessToken && tokenCache.expiresAt > now) {
