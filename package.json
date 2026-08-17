@@ -1,0 +1,24 @@
+{
+  "name": "shopify-print-helper",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fietsDEV/shopify-print-helper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
+  "bugs": {
+    "url": "https://github.com/fietsDEV/shopify-print-helper/issues"
+  },
+  "homepage": "https://github.com/fietsDEV/shopify-print-helper#readme"
+}
