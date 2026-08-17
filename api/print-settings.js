@@ -1,4 +1,5 @@
 const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
+const REQUIRED_SCOPE = 'read_products';
 
 // Cached across warm invocations of the same serverless instance so we don't
 // request a new access token on every request.
@@ -15,13 +16,13 @@ function getEnv() {
   return { SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET };
 }
 
+function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+}
 
-async function getAccessToken() {
-  const now = Date.now();
-  if (tokenCache.accessToken && tokenCache.expiresAt > now) {
-    return tokenCache.accessToken;
-  }
-
+async function fetchNewAccessToken() {
   const { SHOPIFY_SHOP, SHOPIFY_CLIENT_ID, SHOPIFY_CLIENT_SECRET } = getEnv();
 
   const response = await fetch(`https://${SHOPIFY_SHOP}.myshopify.com/admin/oauth/access_token`, {
@@ -51,13 +52,37 @@ async function getAccessToken() {
     );
   }
 
+  if (typeof data.scope === 'string' && data.scope.trim().length > 0) {
+    const grantedScopes = data.scope.split(',').map((scope) => scope.trim());
+    if (!grantedScopes.includes(REQUIRED_SCOPE)) {
+      throw new Error(`Shopify access token is missing required ${REQUIRED_SCOPE} scope`);
+    }
+  }
+
+  const now = Date.now();
+  const expiresInMs = Number(data.expires_in) > 0 ? Number(data.expires_in) * 1000 : 0;
+
   tokenCache = {
     accessToken: data.access_token,
-    // Refresh a little early to avoid edge-of-expiry failures.
-    expiresAt: now + (Number(data.expires_in) || 0) * 1000 - 60_000,
+    // Refresh a little early to avoid edge-of-expiry failures. When Shopify
+    // doesn't return a usable expires_in, treat the token as already expired
+    // so it's never cached indefinitely (it's still returned for this call).
+    expiresAt: expiresInMs > 0 ? now + expiresInMs - 60_000 : now,
   };
 
   return tokenCache.accessToken;
+}
+
+async function getAccessToken() {
+  const now = Date.now();
+  if (tokenCache.accessToken && tokenCache.expiresAt > now) {
+    return tokenCache.accessToken;
+  }
+  return fetchNewAccessToken();
+}
+
+function clearAccessToken() {
+  tokenCache = { accessToken: null, expiresAt: 0 };
 }
 
 const PRODUCT_QUERY = `
@@ -73,9 +98,8 @@ const PRODUCT_QUERY = `
   }
 `;
 
-async function fetchProduct(productId) {
+async function requestProduct(productId, accessToken) {
   const { SHOPIFY_SHOP } = getEnv();
-  const accessToken = await getAccessToken();
 
   const response = await fetch(`https://${SHOPIFY_SHOP}.myshopify.com/admin/api/${SHOPIFY_API_VERSION}/graphql.json`, {
     method: 'POST',
@@ -88,6 +112,18 @@ async function fetchProduct(productId) {
       variables: { id: `gid://shopify/Product/${productId}` },
     }),
   });
+
+  return response;
+}
+
+async function fetchProduct(productId, allowRetry = true) {
+  const accessToken = await getAccessToken();
+  const response = await requestProduct(productId, accessToken);
+
+  if (response.status === 401 && allowRetry) {
+    clearAccessToken();
+    return fetchProduct(productId, false);
+  }
 
   const text = await response.text();
   let data;
@@ -115,8 +151,14 @@ function toNumber(metafield) {
 }
 
 module.exports = async function handler(req, res) {
+  setCorsHeaders(res);
+
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end();
+  }
+
   if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET');
+    res.setHeader('Allow', 'GET, OPTIONS');
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
@@ -149,7 +191,6 @@ module.exports = async function handler(req, res) {
 
     return res.status(502).json({
       error: 'Failed to fetch print settings from Shopify',
-      debug: error instanceof Error ? error.message : String(error),
     });
   }
 };
