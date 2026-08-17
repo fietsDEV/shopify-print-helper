@@ -1,4 +1,4 @@
-const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2025-01';
+const SHOPIFY_API_VERSION = process.env.SHOPIFY_API_VERSION || '2026-07';
 
 // Cached across warm invocations of the same serverless instance so we don't
 // request a new access token on every request.
@@ -139,7 +139,14 @@ module.exports = async function handler(req, res) {
       bleed: toNumber(product.printBleed),
     });
   } catch (error) {
-    console.error('print-settings error:', error);
-    return res.status(502).json({ error: 'Failed to fetch print settings from Shopify' });
+    console.error(
+        'PRINT_SETTINGS_ERROR:',
+        error instanceof Error ? error.message : String(error)
+    );
+
+    return res.status(502).json({
+      error: 'Failed to fetch print settings from Shopify',
+      debug: error instanceof Error ? error.message : String(error),
+    });
   }
 };
